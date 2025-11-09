@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { MapPin, Satellite, Calendar, Plus, Map as MapIcon, Cloud, Thermometer, Wind, Droplets, Layers, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { MapPin, Satellite, Calendar, Plus, Map as MapIcon, Cloud, Thermometer, Wind, Droplets, Layers, FolderOpen, ChevronLeft, ChevronRight, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,10 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { 
   getAllFolders, 
-  updateFolderSatelliteData, 
-  type LocationFolder 
+  updateFolderSatelliteData,
+  findOrCreateFolder,
+  type LocationFolder,
+  type LocationCoordinates
 } from "@/lib/geolocation";
 import {
   fetchNDVIData,
@@ -33,13 +35,15 @@ interface MapViewProps {
 }
 
 export const MapView = ({ onSelectFolder }: MapViewProps) => {
-  const [folders] = useState<LocationFolder[]>(getAllFolders());
+  const [folders, setFolders] = useState<LocationFolder[]>(getAllFolders());
   const [selectedFolder, setSelectedFolder] = useState<LocationFolder | null>(null);
   const [isLoadingSatellite, setIsLoadingSatellite] = useState(false);
   const [mapStyle, setMapStyle] = useState<"streets" | "satellite">("streets");
   const [showWeatherPanel, setShowWeatherPanel] = useState(false);
   const [showDataPanel, setShowDataPanel] = useState(false);
   const [showFoldersPanel, setShowFoldersPanel] = useState(false);
+  const [isCreatingLocation, setIsCreatingLocation] = useState(false);
+  const [newLocationCoords, setNewLocationCoords] = useState<{lat: number, lng: number} | null>(null);
   const [weatherLayers, setWeatherLayers] = useState({
     precipitation: false,
     temperature: false,
@@ -55,6 +59,7 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const dataOverlayRefs = useRef<{ [key: string]: string }>({});
+  const newLocationMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   // Initialize map
   useEffect(() => {
@@ -364,6 +369,75 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
     }
   };
 
+  const startLocationCreation = () => {
+    if (!map.current) return;
+    
+    setIsCreatingLocation(true);
+    const center = map.current.getCenter();
+    setNewLocationCoords({ lat: center.lat, lng: center.lng });
+
+    // Create draggable marker
+    const el = document.createElement("div");
+    el.className = "mapbox-marker-new";
+    el.style.width = "40px";
+    el.style.height = "40px";
+    el.style.cursor = "move";
+    el.innerHTML = `
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" fill="hsl(var(--primary))" stroke="white" stroke-width="2"/>
+        <circle cx="12" cy="10" r="3" fill="white"/>
+      </svg>
+    `;
+
+    const marker = new mapboxgl.Marker({ element: el, draggable: true })
+      .setLngLat([center.lng, center.lat])
+      .addTo(map.current);
+
+    marker.on('drag', () => {
+      const lngLat = marker.getLngLat();
+      setNewLocationCoords({ lat: lngLat.lat, lng: lngLat.lng });
+    });
+
+    newLocationMarkerRef.current = marker;
+  };
+
+  const confirmLocationCreation = () => {
+    if (!newLocationCoords) return;
+
+    const coordinates: LocationCoordinates = {
+      latitude: newLocationCoords.lat,
+      longitude: newLocationCoords.lng,
+      altitude: null,
+      accuracy: 10,
+      timestamp: Date.now()
+    };
+
+    const newFolder = findOrCreateFolder(coordinates);
+    setFolders(getAllFolders());
+    setSelectedFolder(newFolder);
+    
+    if (map.current) {
+      map.current.flyTo({
+        center: [newFolder.coordinates.longitude, newFolder.coordinates.latitude],
+        zoom: 15,
+        duration: 1000,
+      });
+    }
+
+    cancelLocationCreation();
+    toast.success("Location created successfully");
+  };
+
+  const cancelLocationCreation = () => {
+    setIsCreatingLocation(false);
+    setNewLocationCoords(null);
+    
+    if (newLocationMarkerRef.current) {
+      newLocationMarkerRef.current.remove();
+      newLocationMarkerRef.current = null;
+    }
+  };
+
   return (
     <div className="h-full bg-background relative">
       {/* Full Width Map */}
@@ -543,17 +617,28 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
         >
           <div className="h-full overflow-y-auto">
             <div className="p-4 space-y-4">
-              <div className="flex items-center justify-between sticky top-0 bg-background/95 backdrop-blur-md py-2 z-10">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold">Location Folders</h2>
-                  <Badge variant="secondary">{folders.length}</Badge>
+              <div className="space-y-3 sticky top-0 bg-background/95 backdrop-blur-md py-2 z-10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold">Location Folders</h2>
+                    <Badge variant="secondary">{folders.length}</Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowFoldersPanel(false)}
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
                 </div>
+                
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowFoldersPanel(false)}
+                  onClick={startLocationCreation}
+                  disabled={isCreatingLocation}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  <ChevronRight className="h-5 w-5" />
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Location
                 </Button>
               </div>
 
@@ -631,6 +716,40 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
             </div>
           </div>
         </div>
+
+        {/* Location Creation Controls */}
+        {isCreatingLocation && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30">
+            <Card className="bg-card/95 backdrop-blur-md shadow-xl p-4">
+              <div className="flex items-center gap-3">
+                <div className="text-sm">
+                  <p className="font-semibold">Position the marker</p>
+                  <p className="text-xs text-muted-foreground">
+                    {newLocationCoords ? 
+                      `${newLocationCoords.lat.toFixed(6)}, ${newLocationCoords.lng.toFixed(6)}` 
+                      : 'Loading...'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={confirmLocationCreation}
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={cancelLocationCreation}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
