@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { useState } from "react";
 import { SatelliteOverlay } from "./SatelliteOverlay";
+import { WeatherForecast } from "./WeatherForecast";
 
 interface LocationDetailProps {
   folder: LocationFolder;
@@ -148,6 +149,12 @@ export const LocationDetail = ({ folder: initialFolder, onBack, onUpdate }: Loca
 
         {/* Satellite Data */}
         {folder.satelliteData && <SatelliteOverlay data={folder.satelliteData} />}
+
+        {/* Weather Forecast */}
+        <WeatherForecast 
+          latitude={folder.coordinates.latitude} 
+          longitude={folder.coordinates.longitude} 
+        />
 
         {/* Add Note */}
         <Card className="p-4">
