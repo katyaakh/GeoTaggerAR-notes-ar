@@ -21,6 +21,7 @@ import {
 } from "@/lib/satelliteData";
 import { toast } from "sonner";
 import { SatelliteOverlay } from "./SatelliteOverlay";
+import { SatelliteDataIndicators } from "./SatelliteDataIndicators";
 
 mapboxgl.accessToken = "pk.eyJ1Ijoid29uZGVyZmVlbCIsImEiOiJjbTEyZmdnajkwdmU3MmtzOHlvYXYyZHJvIn0.2PlXKgkiDN0s5P908aGSNQ";
 
@@ -605,35 +606,21 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
 
                         {selectedFolder?.id === folder.id && (
                           <div className="space-y-3 pt-3 border-t">
-                            {folder.satelliteData && (
-                              <SatelliteOverlay data={folder.satelliteData} />
-                            )}
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleFetchSatellite(folder);
-                                }}
-                                disabled={isLoadingSatellite}
-                                className="flex-1"
-                              >
-                                <Satellite className="h-4 w-4 mr-2" />
-                                {isLoadingSatellite ? "Fetching..." : "Get Data"}
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onSelectFolder(folder);
-                                }}
-                                className="flex-1"
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                View Details
-                              </Button>
-                            </div>
+                            <SatelliteDataIndicators
+                              latitude={folder.coordinates.latitude}
+                              longitude={folder.coordinates.longitude}
+                            />
+                            <Button
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectFolder(folder);
+                              }}
+                              className="w-full"
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              View Details
+                            </Button>
                           </div>
                         )}
                       </div>
