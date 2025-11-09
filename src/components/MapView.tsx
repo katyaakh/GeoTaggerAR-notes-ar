@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { MapPin, Satellite, Calendar, Plus, Map as MapIcon } from "lucide-react";
+import { MapPin, Satellite, Calendar, Plus, Map as MapIcon, Cloud, Thermometer, Wind, Droplets } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { 
@@ -15,6 +17,9 @@ import { SatelliteOverlay } from "./SatelliteOverlay";
 
 mapboxgl.accessToken = "pk.eyJ1Ijoid29uZGVyZmVlbCIsImEiOiJjbTEyZmdnajkwdmU3MmtzOHlvYXYyZHJvIn0.2PlXKgkiDN0s5P908aGSNQ";
 
+// OpenWeatherMap API key - using demo key (replace with your own for production)
+const OPENWEATHER_API_KEY = "439d4b804bc8187953eb36d2a8c26a02";
+
 interface MapViewProps {
   onSelectFolder: (folder: LocationFolder) => void;
 }
@@ -24,6 +29,13 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
   const [selectedFolder, setSelectedFolder] = useState<LocationFolder | null>(null);
   const [isLoadingSatellite, setIsLoadingSatellite] = useState(false);
   const [mapStyle, setMapStyle] = useState<"streets" | "satellite">("streets");
+  const [showWeatherPanel, setShowWeatherPanel] = useState(false);
+  const [weatherLayers, setWeatherLayers] = useState({
+    precipitation: false,
+    temperature: false,
+    wind: false,
+    clouds: false,
+  });
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -114,10 +126,102 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
     map.current.setStyle(styleUrl);
     setMapStyle(newStyle);
 
-    // Re-add markers after style loads
+    // Re-add weather layers after style loads
     map.current.once("styledata", () => {
-      // Markers persist across style changes, no need to re-add
+      reapplyWeatherLayers();
     });
+  };
+
+  // Apply or remove weather layers
+  const reapplyWeatherLayers = () => {
+    if (!map.current) return;
+
+    // Remove existing weather layers
+    const layerIds = ["precipitation-layer", "temperature-layer", "wind-layer", "clouds-layer"];
+    layerIds.forEach((layerId) => {
+      if (map.current!.getLayer(layerId)) {
+        map.current!.removeLayer(layerId);
+      }
+      if (map.current!.getSource(layerId)) {
+        map.current!.removeSource(layerId);
+      }
+    });
+
+    // Add active weather layers
+    Object.entries(weatherLayers).forEach(([layer, isActive]) => {
+      if (isActive && map.current) {
+        addWeatherLayer(layer as keyof typeof weatherLayers);
+      }
+    });
+  };
+
+  const addWeatherLayer = (layerType: keyof typeof weatherLayers) => {
+    if (!map.current) return;
+
+    const layerConfigs = {
+      precipitation: {
+        id: "precipitation-layer",
+        tiles: `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`,
+        opacity: 0.6,
+      },
+      temperature: {
+        id: "temperature-layer",
+        tiles: `https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`,
+        opacity: 0.5,
+      },
+      wind: {
+        id: "wind-layer",
+        tiles: `https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`,
+        opacity: 0.5,
+      },
+      clouds: {
+        id: "clouds-layer",
+        tiles: `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${OPENWEATHER_API_KEY}`,
+        opacity: 0.4,
+      },
+    };
+
+    const config = layerConfigs[layerType];
+
+    // Add source
+    if (!map.current.getSource(config.id)) {
+      map.current.addSource(config.id, {
+        type: "raster",
+        tiles: [config.tiles],
+        tileSize: 256,
+      });
+    }
+
+    // Add layer
+    if (!map.current.getLayer(config.id)) {
+      map.current.addLayer({
+        id: config.id,
+        type: "raster",
+        source: config.id,
+        paint: {
+          "raster-opacity": config.opacity,
+        },
+      });
+    }
+  };
+
+  const toggleWeatherLayer = (layerType: keyof typeof weatherLayers) => {
+    const newState = !weatherLayers[layerType];
+    setWeatherLayers((prev) => ({ ...prev, [layerType]: newState }));
+
+    if (!map.current) return;
+
+    if (newState) {
+      addWeatherLayer(layerType);
+    } else {
+      const layerId = `${layerType}-layer`;
+      if (map.current.getLayer(layerId)) {
+        map.current.removeLayer(layerId);
+      }
+      if (map.current.getSource(layerId)) {
+        map.current.removeSource(layerId);
+      }
+    }
   };
 
   const handleFetchSatellite = async (folder: LocationFolder) => {
@@ -146,8 +250,9 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
             className="absolute inset-0"
           />
           
-          {/* Map Style Toggle */}
-          <div className="absolute top-4 left-4 z-10">
+          {/* Map Controls */}
+          <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+            {/* Style Toggle */}
             <Button
               onClick={toggleMapStyle}
               variant="secondary"
@@ -166,6 +271,76 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
                 </>
               )}
             </Button>
+
+            {/* Weather Panel Toggle */}
+            <Button
+              onClick={() => setShowWeatherPanel(!showWeatherPanel)}
+              variant="secondary"
+              size="sm"
+              className="gap-2 bg-card/95 backdrop-blur-md shadow-lg hover:shadow-xl transition-all"
+            >
+              <Cloud className="h-4 w-4" />
+              Weather
+            </Button>
+
+            {/* Weather Layers Panel */}
+            {showWeatherPanel && (
+              <Card className="bg-card/95 backdrop-blur-md shadow-xl p-3 space-y-3 w-48">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="precipitation" className="text-xs font-medium flex items-center gap-1">
+                    <Droplets className="h-3 w-3 text-blue-500" />
+                    Precipitation
+                  </Label>
+                  <Switch
+                    id="precipitation"
+                    checked={weatherLayers.precipitation}
+                    onCheckedChange={() => toggleWeatherLayer("precipitation")}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="temperature" className="text-xs font-medium flex items-center gap-1">
+                    <Thermometer className="h-3 w-3 text-red-500" />
+                    Temperature
+                  </Label>
+                  <Switch
+                    id="temperature"
+                    checked={weatherLayers.temperature}
+                    onCheckedChange={() => toggleWeatherLayer("temperature")}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="wind" className="text-xs font-medium flex items-center gap-1">
+                    <Wind className="h-3 w-3 text-cyan-500" />
+                    Wind
+                  </Label>
+                  <Switch
+                    id="wind"
+                    checked={weatherLayers.wind}
+                    onCheckedChange={() => toggleWeatherLayer("wind")}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="clouds" className="text-xs font-medium flex items-center gap-1">
+                    <Cloud className="h-3 w-3 text-gray-500" />
+                    Clouds
+                  </Label>
+                  <Switch
+                    id="clouds"
+                    checked={weatherLayers.clouds}
+                    onCheckedChange={() => toggleWeatherLayer("clouds")}
+                  />
+                </div>
+
+                <div className="pt-2 border-t">
+                  <p className="text-[10px] text-muted-foreground">
+                    Data: OpenWeatherMap
+                  </p>
+                </div>
+              </Card>
+            )}
           </div>
         </div>
 
