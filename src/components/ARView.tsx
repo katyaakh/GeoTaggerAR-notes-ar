@@ -14,6 +14,7 @@ import {
   findOrCreateFolder,
   addNoteToFolder,
   getAllFolders,
+  renameFolder,
 } from "@/lib/geolocation";
 import { toast } from "sonner";
 
@@ -110,7 +111,6 @@ export const ARView = ({ onViewNotes }: ARViewProps) => {
     const folder = findOrCreateFolder(currentLocation);
     
     // Update folder name if it was just created
-    const { renameFolder } = require("@/lib/geolocation");
     renameFolder(folder.id, folderName);
     
     // Refresh to get updated folder

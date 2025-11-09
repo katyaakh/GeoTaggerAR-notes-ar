@@ -7,7 +7,7 @@ import { LocationFolders } from "@/components/LocationFolders";
 import { LocationDetail } from "@/components/LocationDetail";
 import { PermissionsScreen } from "@/components/PermissionsScreen";
 import { BottomNav, type ViewMode } from "@/components/BottomNav";
-import { type LocationFolder } from "@/lib/geolocation";
+import { type LocationFolder, getAllFolders } from "@/lib/geolocation";
 
 const Index = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("permissions");
@@ -57,8 +57,7 @@ const Index = () => {
           folder={selectedFolder}
           onBack={handleBackToFolders}
           onUpdate={() => {
-            const { getAllFolders } = require("@/lib/geolocation");
-            const updated = getAllFolders().find((f: LocationFolder) => f.id === selectedFolder.id);
+            const updated = getAllFolders().find((f) => f.id === selectedFolder.id);
             if (updated) setSelectedFolder(updated);
           }}
         />
