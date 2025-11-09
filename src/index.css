@@ -123,3 +123,16 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Mapbox marker styles */
+.mapbox-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mapbox-marker:hover {
+  transform: scale(1.1);
+  transition: transform 0.2s;
+}
+

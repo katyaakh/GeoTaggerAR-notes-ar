@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MapPin, Satellite, Calendar, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { 
   getAllFolders, 
   updateFolderSatelliteData, 
@@ -10,6 +12,8 @@ import {
 } from "@/lib/geolocation";
 import { toast } from "sonner";
 import { SatelliteOverlay } from "./SatelliteOverlay";
+
+mapboxgl.accessToken = "pk.eyJ1Ijoid29uZGVyZmVlbCIsImEiOiJjbTEyZmdnajkwdmU3MmtzOHlvYXYyZHJvIn0.2PlXKgkiDN0s5P908aGSNQ";
 
 interface MapViewProps {
   onSelectFolder: (folder: LocationFolder) => void;
@@ -19,6 +23,83 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
   const [folders] = useState<LocationFolder[]>(getAllFolders());
   const [selectedFolder, setSelectedFolder] = useState<LocationFolder | null>(null);
   const [isLoadingSatellite, setIsLoadingSatellite] = useState(false);
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapContainer.current || map.current) return;
+
+    // Calculate center point from all folders or default to Europe
+    let center: [number, number] = [2.3522, 48.8566]; // Default to Paris
+    let zoom = 5;
+
+    if (folders.length > 0) {
+      const avgLat = folders.reduce((sum, f) => sum + f.coordinates.latitude, 0) / folders.length;
+      const avgLon = folders.reduce((sum, f) => sum + f.coordinates.longitude, 0) / folders.length;
+      center = [avgLon, avgLat];
+      zoom = folders.length === 1 ? 14 : 10;
+    }
+
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: "mapbox://styles/mapbox/streets-v12",
+      center,
+      zoom,
+    });
+
+    // Add navigation controls
+    map.current.addControl(
+      new mapboxgl.NavigationControl(),
+      "top-right"
+    );
+
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      map.current?.remove();
+    };
+  }, []);
+
+  // Add markers for folders
+  useEffect(() => {
+    if (!map.current) return;
+
+    // Clear existing markers
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+
+    // Add markers for each folder
+    folders.forEach((folder) => {
+      const el = document.createElement("div");
+      el.className = "mapbox-marker";
+      el.style.width = "32px";
+      el.style.height = "32px";
+      el.style.cursor = "pointer";
+      el.innerHTML = `
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" fill="hsl(var(--primary))" stroke="white" stroke-width="2"/>
+          <circle cx="12" cy="10" r="3" fill="white"/>
+        </svg>
+      `;
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([folder.coordinates.longitude, folder.coordinates.latitude])
+        .addTo(map.current!);
+
+      // Add click handler
+      el.addEventListener("click", () => {
+        setSelectedFolder(folder);
+        map.current?.flyTo({
+          center: [folder.coordinates.longitude, folder.coordinates.latitude],
+          zoom: 15,
+          duration: 1000,
+        });
+      });
+
+      markersRef.current.push(marker);
+    });
+  }, [folders]);
 
   const handleFetchSatellite = async (folder: LocationFolder) => {
     setIsLoadingSatellite(true);
@@ -39,39 +120,11 @@ export const MapView = ({ onSelectFolder }: MapViewProps) => {
   return (
     <div className="h-full bg-background">
       <div className="grid md:grid-cols-2 gap-0 h-full">
-        {/* Map Area - Placeholder for actual map integration */}
-        <div className="relative bg-muted/20 min-h-[400px] md:min-h-full border-r">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center space-y-4 p-6">
-              <MapPin className="h-16 w-16 text-primary mx-auto" />
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Interactive Map View</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Mapbox integration coming soon
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Click location folders below to view details
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Markers overlay simulation */}
-          <div className="absolute inset-0 pointer-events-none">
-            {folders.slice(0, 3).map((folder, idx) => (
-              <div
-                key={folder.id}
-                className="absolute animate-pulse"
-                style={{
-                  left: `${30 + idx * 25}%`,
-                  top: `${40 + idx * 10}%`,
-                }}
-              >
-                <MapPin className="h-8 w-8 text-primary drop-shadow-lg" />
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Mapbox Map */}
+        <div 
+          ref={mapContainer} 
+          className="relative min-h-[400px] md:min-h-full border-r"
+        />
 
         {/* Location Folders Sidebar */}
         <div className="overflow-y-auto h-full">
