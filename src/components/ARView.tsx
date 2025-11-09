@@ -3,6 +3,7 @@ import { Camera, Navigation, Plus, List, CameraOff, Download } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import geoTaggerLogo from "@/assets/geotagger-logo.png";
 import { NoteForm } from "@/components/NoteForm";
+import { LocationCreator } from "@/components/LocationCreator";
 import { ProximityAlert } from "@/components/ProximityAlert";
 import {
   watchGeolocation,
@@ -10,6 +11,9 @@ import {
   type LocationCoordinates,
   getNearbyFolders,
   type LocationFolder,
+  findOrCreateFolder,
+  addNoteToFolder,
+  getAllFolders,
 } from "@/lib/geolocation";
 import { toast } from "sonner";
 
@@ -19,7 +23,9 @@ interface ARViewProps {
 
 export const ARView = ({ onViewNotes }: ARViewProps) => {
   const [currentLocation, setCurrentLocation] = useState<LocationCoordinates | null>(null);
+  const [showLocationCreator, setShowLocationCreator] = useState(false);
   const [showNoteForm, setShowNoteForm] = useState(false);
+  const [currentFolder, setCurrentFolder] = useState<LocationFolder | null>(null);
   const [nearbyFolders, setNearbyFolders] = useState<LocationFolder[]>([]);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraEnabled, setCameraEnabled] = useState(true);
@@ -82,18 +88,52 @@ export const ARView = ({ onViewNotes }: ARViewProps) => {
     }
   }, [cameraStream]);
 
-  const handleNoteSaved = (noteText: string) => {
-    if (currentLocation) {
-      const { findOrCreateFolder, addNoteToFolder } = require("@/lib/geolocation");
-      const folder = findOrCreateFolder(currentLocation);
-      addNoteToFolder(folder.id, noteText);
-      setShowNoteForm(false);
-      toast.success("Note saved to location folder!");
-      
-      // Refresh nearby folders
-      const nearby = getNearbyFolders(currentLocation.latitude, currentLocation.longitude);
-      setNearbyFolders(nearby);
+  const handleAddNoteClick = () => {
+    if (!currentLocation) return;
+
+    // Check if a folder exists at this location
+    const existingFolder = findOrCreateFolder(currentLocation);
+    
+    if (existingFolder.notes.length === 0) {
+      // New location - show location creator first
+      setShowLocationCreator(true);
+    } else {
+      // Existing location - go straight to note form
+      setCurrentFolder(existingFolder);
+      setShowNoteForm(true);
     }
+  };
+
+  const handleLocationCreated = (folderName: string) => {
+    if (!currentLocation) return;
+
+    const folder = findOrCreateFolder(currentLocation);
+    
+    // Update folder name if it was just created
+    const { renameFolder } = require("@/lib/geolocation");
+    renameFolder(folder.id, folderName);
+    
+    // Refresh to get updated folder
+    const updatedFolders = getAllFolders();
+    const updatedFolder = updatedFolders.find((f) => f.id === folder.id);
+    
+    setCurrentFolder(updatedFolder || folder);
+    setShowLocationCreator(false);
+    setShowNoteForm(true);
+    toast.success("Location folder created!");
+  };
+
+  const handleNoteSaved = (noteText: string) => {
+    if (!currentLocation || !currentFolder) return;
+
+    addNoteToFolder(currentFolder.id, noteText);
+    setShowNoteForm(false);
+    setCurrentFolder(null);
+    toast.success("Note saved to location folder!");
+    
+    // Refresh nearby folders
+    const nearby = getNearbyFolders(currentLocation.latitude, currentLocation.longitude);
+    setNearbyFolders(nearby);
   };
 
   const toggleCamera = () => {
@@ -212,7 +252,7 @@ export const ARView = ({ onViewNotes }: ARViewProps) => {
           )}
           <Button
             size="lg"
-            onClick={() => setShowNoteForm(true)}
+            onClick={handleAddNoteClick}
             disabled={!currentLocation}
             className="rounded-full bg-gradient-to-r from-primary to-accent shadow-lg hover:shadow-xl transition-all"
           >
@@ -222,11 +262,24 @@ export const ARView = ({ onViewNotes }: ARViewProps) => {
         </div>
       </div>
 
+      {/* Location creator modal */}
+      {showLocationCreator && currentLocation && (
+        <LocationCreator
+          currentLocation={currentLocation}
+          onClose={() => setShowLocationCreator(false)}
+          onCreate={handleLocationCreated}
+        />
+      )}
+
       {/* Note form modal */}
-      {showNoteForm && currentLocation && (
+      {showNoteForm && currentLocation && currentFolder && (
         <NoteForm
           currentLocation={currentLocation}
-          onClose={() => setShowNoteForm(false)}
+          folderName={currentFolder.name}
+          onClose={() => {
+            setShowNoteForm(false);
+            setCurrentFolder(null);
+          }}
           onSave={handleNoteSaved}
         />
       )}

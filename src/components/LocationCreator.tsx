@@ -1,36 +1,38 @@
 import { useState } from "react";
 import { MapPin, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { type LocationCoordinates } from "@/lib/geolocation";
 
-interface NoteFormProps {
+interface LocationCreatorProps {
   currentLocation: LocationCoordinates;
-  folderName: string;
   onClose: () => void;
-  onSave: (noteText: string) => void;
+  onCreate: (folderName: string) => void;
 }
 
-export const NoteForm = ({ currentLocation, folderName, onClose, onSave }: NoteFormProps) => {
-  const [noteText, setNoteText] = useState("");
+export const LocationCreator = ({ 
+  currentLocation, 
+  onClose, 
+  onCreate 
+}: LocationCreatorProps) => {
+  const [folderName, setFolderName] = useState(
+    `Location: ${currentLocation.latitude.toFixed(6)}, ${currentLocation.longitude.toFixed(6)}`
+  );
 
-  const handleSave = () => {
-    if (!noteText.trim()) return;
-    onSave(noteText.trim());
+  const handleCreate = () => {
+    if (!folderName.trim()) return;
+    onCreate(folderName.trim());
   };
 
   return (
     <div className="absolute inset-0 bg-background/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <Card className="w-full max-w-md p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4">
         <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <MapPin className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold text-lg">Add Location Note</h3>
-            </div>
-            <p className="text-xs text-muted-foreground">to: {folderName}</p>
+          <div className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-lg">Create Location Folder</h3>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -48,14 +50,17 @@ export const NoteForm = ({ currentLocation, folderName, onClose, onSave }: NoteF
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="note-text">Note</Label>
-            <Textarea
-              id="note-text"
-              placeholder="What would you like to remember about this spot?"
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              className="min-h-[120px] resize-none"
+            <Label htmlFor="folder-name">Location Name</Label>
+            <Input
+              id="folder-name"
+              placeholder="e.g., North Field, Home Garden"
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             />
+            <p className="text-xs text-muted-foreground">
+              All notes at this location will be grouped under this folder
+            </p>
           </div>
         </div>
 
@@ -64,12 +69,12 @@ export const NoteForm = ({ currentLocation, folderName, onClose, onSave }: NoteF
             Cancel
           </Button>
           <Button
-            onClick={handleSave}
-            disabled={!noteText.trim()}
+            onClick={handleCreate}
+            disabled={!folderName.trim()}
             className="flex-1 bg-gradient-to-r from-primary to-accent"
           >
             <Save className="h-4 w-4 mr-2" />
-            Save Note
+            Create Location
           </Button>
         </div>
       </Card>
